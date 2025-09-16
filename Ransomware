@@ -1,0 +1,176 @@
+
+
+rule BlackCat_Rust_Crypto_Behavior
+{
+    meta:
+        author = "Luis Santiago"
+        description = "Detects BlackCat ransomware (Rust) using crypto routines and common behavioral markers"
+        date = "2025-08-25"
+        reference = "Based on PublicExponentTooLarge, zeroize crate, ChaCha20Aes, and Rust behavioral imports"
+
+    strings:
+        // Unique Rust crypto error strings
+        $err_str = "PublicExponentTooLargePublicExponentTooSmallInvalidCOefficientInvalidExponentInvalidModulusInvalidPrimeTooFewPrimesNpRimesTooSMallINputNotHashedMessageTooLongVerificationDEcryptionINvalidPaddingSCheme/cargo/registry/src/github.com-1ecc6299db9ec823/zeroize-1.4.3/src/lib.rsassertion failed size <= core::isize:: max as usize"
+
+        // ChaCha20/AES string reference
+        $cha_cha = "ChaCha20Aes"
+
+        // Optional partial matches
+        $pe_large = "PublicExponentTooLarge"
+        $pe_small = "PublicExponentTooSmall"
+
+        // Behavioral indicators (static import hints)
+        $sleep_func = "std::thread::sleep"
+        $socket_send_fail = "send"  // or "WSASend", "sendto" depending on platform
+
+    condition:
+        // Primary detection: crypto string + ChaCha20
+        all of ($err_str, $cha_cha) or
+
+        // Fallback: at least 3 of partial crypto + behavioral markers
+        3 of ($pe_large, $pe_small, $cha_cha, $sleep_func, $socket_send_fail)
+}
+
+
+rule Conti_Ransomware_Crypto
+{
+    meta:
+        author = "Luis Santiago"
+        description = "Detects Conti ransomware sample based on unique crypto API usage, strings, and constants"
+        date = "2025-09-07"
+        threat = "Conti Ransomware"
+
+    strings:
+        // Unique ASCII markers in this sample
+        $s1 = "duplicatetoken" ascii
+        $s2 = "crt$xca" ascii
+
+        // Function/interface strings from CNG/MSCrypto usage
+        $s3 = "MSCryptConvertRsaPrivateBlobToFullRsaBlob" ascii
+        $s4 = "GetHashInterface" ascii
+        $s5 = "GetCipherInterface" ascii
+        $s6 = "GetSignatureInterface" ascii
+        $s7 = "GetKeyDerivationInterface" ascii
+        $s8 = "GetSecretAgreementInterface" ascii
+        $s9 = "GetAsymmetricEncryptionInterface" ascii
+        $s10 = "GetTRNGInterface" ascii
+
+        // Hex pattern for push + call to CryptEncrypt / BcryptEncrypt
+        $h1 = { 6A 24 68 ?? ?? ?? ?? E8 ?? ?? ?? ?? }
+
+        // Optional: look for combination of Bcrypt imports (low false positives)
+        $h2 = { 42 43 52 59 50 54 47 45 4E 52 45 41 54 45 53 59 4D }  // "BCRYPTGENRANDOM" in ASCII hex
+
+    condition:
+        uint16(0) == 0x5A4D and           // Ensure PE file
+        all of ($s*) and                   // All unique strings present
+        any of ($h*)                       // At least one unique hex pattern
+}
+
+
+
+rule BlackMatter_Ransom_Note
+{
+    meta:
+        author = "Luis Santiago"
+        description = "Detects BlackMatter / Conti-style ransom note based on unique text"
+        date = "2025-09-07"
+        threat = "Ransomware"
+        reference = "Reversing analysis by Luis Santiago"
+
+    strings:
+        $msg1 = "BlackMatter Ransomware encrypted all your files!" ascii nocase
+        $msg2 = "To get your data and keep your privacy safe," ascii nocase
+
+        // Optional: typical filename for the note
+        $f1 = "README_FOR_DECRYPT.txt" ascii nocase
+
+    condition:
+        any of ($msg*) or any of ($f*)
+}
+
+
+
+rule Conti_Networking_Indicators
+{
+    meta:
+        author = "Luis Santiago"
+        description = "Detects Conti / BlackMatter networking behavior via CNG/SSL interfaces and MIB file"
+        date = "2025-09-07"
+        threat = "Ransomware Networking"
+        reference = "Reversing analysis by Luis Santiago"
+
+    strings:
+        // SSL / CNG related imports
+        $ncrypt1 = "NCryptEncrypt" ascii
+        $ncrypt2 = "NCryptImportKey" ascii
+        $ncrypt3 = "NCryptOpenStorageProvider" ascii
+        $ssl1 = "SSLEncryptPacket" ascii
+        $ssl2 = "SSSLExpandTrafficKeys" ascii
+
+        // Unique file storing network/MIB info
+        $mib_file = "C:\\Windows\\mib.bin" ascii nocase
+
+        // MIB field names commonly observed in this sample
+        $f1 = "sysContact" ascii
+        $f2 = "sysNumber" ascii
+        $f3 = "ipForwardPolicy" ascii
+        $f4 = "tcpInSegs" ascii
+
+    condition:
+        any of ($ssl*) or ($mib_file and any of ($f*))
+}
+
+
+
+
+rule Conti_Networking
+{
+    meta:
+        author = "Luis Santiago"
+        description = "Detects Conti/BlackMatter networking behavior: reconnaissance and exfiltration"
+        date = "2025-09-07"
+        threat = "Ransomware Networking"
+        reference = "Reversing analysis by Luis Santiago"
+
+    strings:
+        // Networking APIs - reconnaissance
+        $api1 = "GetAdaptersInfo" ascii
+        $api2 = "DnsQueryEx" ascii
+
+        // Networking APIs - communication
+        $api3 = "socket" ascii
+        $api4 = "connect" ascii
+        $api5 = "send" ascii
+        $api6 = "recv" ascii
+        $api7 = "bind" ascii
+
+        // SSL / encryption functions
+        $ssl1 = "SSLEncryptPacket" ascii
+        $ssl2 = "SSSLExpandTrafficKeys" ascii
+
+        // Unique file storing network info / MIB
+        $mib_file = "C:\\Windows\\mib.bin" ascii nocase
+
+        // MIB field names
+        $f1 = "sysContact" ascii
+        $f2 = "sysNumber" ascii
+        $f3 = "ipForwardPolicy" ascii
+        $f4 = "tcpInSegs" ascii
+
+        // Networking DLL imports
+        $dll1 = "ws2_32.dll" ascii
+        $dll2 = "iphlpapi.dll" ascii
+        $dll3 = "dnsapi.dll" ascii
+        $dll4 = "cryptsp.dll" ascii
+
+    condition:
+        // Trigger if either SSL functions or mib.bin + MIB fields are found
+        any of ($ssl*) or 
+        ($mib_file and any of ($f*)) or
+        // Trigger if networking APIs or DLL imports are found
+        any of ($api*) or any of ($dll*)
+}
+
+
+
