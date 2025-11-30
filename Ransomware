@@ -124,53 +124,5 @@ rule Conti_Networking_Indicators
 
 
 
-rule Conti_Networking
-{
-    meta:
-        author = "Luis Santiago"
-        description = "Detects Conti/BlackMatter networking behavior: reconnaissance and exfiltration"
-        date = "2025-09-07"
-        threat = "Ransomware Networking"
-        reference = "Reversing analysis by Luis Santiago"
-
-    strings:
-        // Networking APIs - reconnaissance
-        $api1 = "GetAdaptersInfo" ascii
-        $api2 = "DnsQueryEx" ascii
-
-        // Networking APIs - communication
-        $api3 = "socket" ascii
-        $api4 = "connect" ascii
-        $api5 = "send" ascii
-        $api6 = "recv" ascii
-        $api7 = "bind" ascii
-
-        // SSL / encryption functions
-        $ssl1 = "SSLEncryptPacket" ascii
-        $ssl2 = "SSSLExpandTrafficKeys" ascii
-
-        // Unique file storing network info / MIB
-        $mib_file = "C:\\Windows\\mib.bin" ascii nocase
-
-        // MIB field names
-        $f1 = "sysContact" ascii
-        $f2 = "sysNumber" ascii
-        $f3 = "ipForwardPolicy" ascii
-        $f4 = "tcpInSegs" ascii
-
-        // Networking DLL imports
-        $dll1 = "ws2_32.dll" ascii
-        $dll2 = "iphlpapi.dll" ascii
-        $dll3 = "dnsapi.dll" ascii
-        $dll4 = "cryptsp.dll" ascii
-
-    condition:
-        // Trigger if either SSL functions or mib.bin + MIB fields are found
-        any of ($ssl*) or 
-        ($mib_file and any of ($f*)) or
-        // Trigger if networking APIs or DLL imports are found
-        any of ($api*) or any of ($dll*)
-}
-
 
 
